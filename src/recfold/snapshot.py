@@ -1,7 +1,7 @@
 """Safe deep copies of function arguments and local variables for recfold."""
 
 import copy
-from typing import Any
+from typing import Any, Dict, Tuple
 
 
 def safe_copy(value: Any) -> Any:
@@ -29,3 +29,14 @@ def safe_repr(value: Any, max_len: int = 80) -> str:
     if len(text) > max_len:
         text = text[: max_len - 3] + "..."
     return text
+
+
+def snapshot_args(args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+    """Return safe copies of a call's positional and keyword arguments.
+
+    The result has the same shape as the input: (tuple, dict). Each value is
+    copied with safe_copy, so the originals are never shared or changed.
+    """
+    copied_args = tuple(safe_copy(a) for a in args)
+    copied_kwargs = {name: safe_copy(value) for name, value in kwargs.items()}
+    return copied_args, copied_kwargs

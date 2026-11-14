@@ -1,6 +1,6 @@
 import threading
 
-from recfold.snapshot import safe_copy, safe_repr
+from recfold.snapshot import safe_copy, safe_repr, snapshot_args
 
 
 def test_safe_copy_simple_values():
@@ -49,3 +49,31 @@ def test_safe_repr_broken_repr_gives_placeholder():
             raise ValueError("boom")
 
     assert safe_repr(Broken()) == "<unreprable Broken>"
+
+
+def test_snapshot_args_keeps_shape():
+    args, kwargs = snapshot_args((1, "a"), {"n": 5})
+    assert args == (1, "a")
+    assert isinstance(args, tuple)
+    assert kwargs == {"n": 5}
+
+
+def test_snapshot_args_is_independent_of_original():
+    data = [1, 2]
+    memo = {"x": [0]}
+    args, kwargs = snapshot_args((data,), {"memo": memo})
+    data.append(3)
+    memo["x"].append(9)
+    assert args == ([1, 2],)
+    assert kwargs == {"memo": {"x": [0]}}
+
+
+def test_snapshot_args_empty():
+    assert snapshot_args((), {}) == ((), {})
+
+
+def test_snapshot_args_uncopyable_gives_placeholder():
+    gen = (x for x in range(3))
+    args, kwargs = snapshot_args((gen,), {"g": gen})
+    assert args == ("<uncopyable generator>",)
+    assert kwargs == {"g": "<uncopyable generator>"}
