@@ -1,6 +1,12 @@
 import threading
 
-from recfold.snapshot import make_entry_snapshot, safe_copy, safe_repr, snapshot_args
+from recfold.snapshot import (
+    make_entry_snapshot,
+    make_exit_snapshot,
+    safe_copy,
+    safe_repr,
+    snapshot_args,
+)
 
 
 def test_safe_copy_simple_values():
@@ -101,3 +107,27 @@ def test_make_entry_snapshot_is_independent_of_original():
 def test_make_entry_snapshot_shortens_long_repr():
     snap = make_entry_snapshot((list(range(1000)),), {}, max_len=20)
     assert len(snap["args_repr"][0]) == 20
+
+def test_make_exit_snapshot_has_all_keys():
+    snap = make_exit_snapshot(8)
+    assert set(snap.keys()) == {"result", "result_repr", "error"}
+
+
+def test_make_exit_snapshot_values():
+    snap = make_exit_snapshot([1, 2])
+    assert snap["result"] == [1, 2]
+    assert snap["result_repr"] == "[1, 2]"
+    assert snap["error"] is None
+
+
+def test_make_exit_snapshot_is_independent_of_original():
+    result = [1, 2]
+    snap = make_exit_snapshot(result)
+    result.append(3)
+    assert snap["result"] == [1, 2]
+
+
+def test_make_exit_snapshot_records_error():
+    snap = make_exit_snapshot(None, error=ValueError("bad input"))
+    assert snap["result"] is None
+    assert snap["error"] == "ValueError: bad input"

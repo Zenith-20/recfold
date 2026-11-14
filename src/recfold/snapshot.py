@@ -1,8 +1,7 @@
 """Safe deep copies of function arguments and local variables for recfold."""
 
 import copy
-from typing import Any, Dict, Tuple
-
+from typing import Any, Dict, Optional, Tuple
 
 def safe_copy(value: Any) -> Any:
     """Return a deep copy of value, or a placeholder string if it can't be copied.
@@ -53,4 +52,20 @@ def make_entry_snapshot(args: Tuple[Any, ...], kwargs: Dict[str, Any], max_len: 
         "kwargs": copied_kwargs,
         "args_repr": [safe_repr(a, max_len) for a in args],
         "kwargs_repr": {name: safe_repr(value, max_len) for name, value in kwargs.items()},
+    }
+
+def make_exit_snapshot(result: Any, error: Optional[BaseException] = None, max_len: int = 80) -> Dict[str, Any]:
+    """Build the dict stored in CallNode.exit_snapshot when a call finishes.
+
+    "result" holds a safe copy of the return value and "result_repr" its short text.
+    If the call raised an exception, pass it as error: "error" then holds text
+    like "ValueError: bad input"; otherwise "error" is None.
+    """
+    error_text = None
+    if error is not None:
+        error_text = f"{type(error).__name__}: {error}"
+    return {
+        "result": safe_copy(result),
+        "result_repr": safe_repr(result, max_len),
+        "error": error_text,
     }
