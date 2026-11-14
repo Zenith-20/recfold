@@ -1,6 +1,7 @@
 """Safe deep copies of function arguments and local variables for recfold."""
 
 import copy
+import types
 from typing import Any, Dict, Optional, Tuple
 
 def safe_copy(value: Any) -> Any:
@@ -69,3 +70,19 @@ def make_exit_snapshot(result: Any, error: Optional[BaseException] = None, max_l
         "result_repr": safe_repr(result, max_len),
         "error": error_text,
     }
+
+
+def snapshot_locals(local_vars: Dict[str, Any]) -> Dict[str, Any]:
+    """Return safe copies of a function's local variables, e.g. from locals().
+
+    Hidden names (starting with "__"), imported modules and functions are
+    skipped, because they are not part of the recursion state.
+    """
+    result = {}
+    for name, value in local_vars.items():
+        if name.startswith("__"):
+            continue
+        if isinstance(value, (types.ModuleType, types.FunctionType, types.BuiltinFunctionType)):
+            continue
+        result[name] = safe_copy(value)
+    return result

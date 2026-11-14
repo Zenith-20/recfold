@@ -6,6 +6,7 @@ from recfold.snapshot import (
     safe_copy,
     safe_repr,
     snapshot_args,
+    snapshot_locals,
 )
 
 
@@ -131,3 +132,35 @@ def test_make_exit_snapshot_records_error():
     snap = make_exit_snapshot(None, error=ValueError("bad input"))
     assert snap["result"] is None
     assert snap["error"] == "ValueError: bad input"
+
+def test_snapshot_locals_copies_values():
+    def demo(n):
+        total = [n]
+        return snapshot_locals(locals())
+
+    assert demo(3) == {"n": 3, "total": [3]}
+
+
+def test_snapshot_locals_is_independent_of_original():
+    data = {"seen": [1]}
+    snap = snapshot_locals({"data": data})
+    data["seen"].append(2)
+    assert snap == {"data": {"seen": [1]}}
+
+
+def test_snapshot_locals_skips_hidden_modules_and_functions():
+    def helper():
+        return 1
+
+    snap = snapshot_locals({
+        "__name__": "x",
+        "threading": threading,
+        "helper": helper,
+        "builtin": len,
+        "keep": 5,
+    })
+    assert snap == {"keep": 5}
+
+
+def test_snapshot_locals_empty():
+    assert snapshot_locals({}) == {}
