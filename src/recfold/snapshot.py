@@ -40,3 +40,17 @@ def snapshot_args(args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Tuple[Tuple[
     copied_args = tuple(safe_copy(a) for a in args)
     copied_kwargs = {name: safe_copy(value) for name, value in kwargs.items()}
     return copied_args, copied_kwargs
+
+def make_entry_snapshot(args: Tuple[Any, ...], kwargs: Dict[str, Any], max_len: int = 80) -> Dict[str, Any]:
+    """Build the dict stored in CallNode.entry_snapshot when a call starts.
+
+    "args" and "kwargs" hold safe copies of the inputs.
+    "args_repr" and "kwargs_repr" hold short text versions for the visual map.
+    """
+    copied_args, copied_kwargs = snapshot_args(args, kwargs)
+    return {
+        "args": copied_args,
+        "kwargs": copied_kwargs,
+        "args_repr": [safe_repr(a, max_len) for a in args],
+        "kwargs_repr": {name: safe_repr(value, max_len) for name, value in kwargs.items()},
+    }

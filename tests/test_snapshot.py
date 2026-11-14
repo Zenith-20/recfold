@@ -1,6 +1,6 @@
 import threading
 
-from recfold.snapshot import safe_copy, safe_repr, snapshot_args
+from recfold.snapshot import make_entry_snapshot, safe_copy, safe_repr, snapshot_args
 
 
 def test_safe_copy_simple_values():
@@ -77,3 +77,27 @@ def test_snapshot_args_uncopyable_gives_placeholder():
     args, kwargs = snapshot_args((gen,), {"g": gen})
     assert args == ("<uncopyable generator>",)
     assert kwargs == {"g": "<uncopyable generator>"}
+
+def test_make_entry_snapshot_has_all_keys():
+    snap = make_entry_snapshot((5,), {"memo": {}})
+    assert set(snap.keys()) == {"args", "kwargs", "args_repr", "kwargs_repr"}
+
+
+def test_make_entry_snapshot_values():
+    snap = make_entry_snapshot((5, "x"), {"memo": {1: 1}})
+    assert snap["args"] == (5, "x")
+    assert snap["kwargs"] == {"memo": {1: 1}}
+    assert snap["args_repr"] == ["5", "'x'"]
+    assert snap["kwargs_repr"] == {"memo": "{1: 1}"}
+
+
+def test_make_entry_snapshot_is_independent_of_original():
+    data = [1, 2]
+    snap = make_entry_snapshot((data,), {})
+    data.append(3)
+    assert snap["args"] == ([1, 2],)
+
+
+def test_make_entry_snapshot_shortens_long_repr():
+    snap = make_entry_snapshot((list(range(1000)),), {}, max_len=20)
+    assert len(snap["args_repr"][0]) == 20
