@@ -31,3 +31,21 @@ class DagNode:
     call_count: int = 1
     incoming_edges: List[DagEdge] = field(default_factory=list)
     outgoing_edges: List[DagEdge] = field(default_factory=list)
+
+
+@dataclass
+class TraceAnalysis:
+    total_calls: int = 0
+    unique_calls: int = 0
+    max_depth: int = 0
+    redundancy_ratio: float = 0.0
+
+
+@dataclass
+class TraceSession:
+    func_name: str
+    nodes: Dict[str, CallNode] = field(default_factory=dict)
+    root_id: Optional[str] = None
+    dag_nodes: Dict[str, DagNode] = field(default_factory=dict)
+    dag_edges: List[DagEdge] = field(default_factory=list)
+    analysis: Optional[TraceAnalysis] = None
