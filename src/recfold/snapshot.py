@@ -14,3 +14,18 @@ def safe_copy(value: Any) -> Any:
         return copy.deepcopy(value)
     except Exception:
         return f"<uncopyable {type(value).__name__}>"
+
+
+def safe_repr(value: Any, max_len: int = 80) -> str:
+    """Return a short text version of value, cut to at most max_len characters.
+
+    Long values end with "..." so the visual map stays readable.
+    If repr() itself fails, a placeholder string is returned instead.
+    """
+    try:
+        text = repr(value)
+    except Exception:
+        text = f"<unreprable {type(value).__name__}>"
+    if len(text) > max_len:
+        text = text[: max_len - 3] + "..."
+    return text
