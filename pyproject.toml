@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "recfold"
+version = "0.1.0"
+description = "Zero-dependency interactive recursion tree, memoized DAG folder, backtracking state inspector, and cycle guard for JupyterHub."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Zenith-20/recfold"
+Repository = "https://github.com/Zenith-20/recfold"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/recfold"]
