@@ -5,6 +5,7 @@ from recfold.layout import (
     center_over_children,
     compute_canvas_size,
     compute_levels,
+    edge_segments,
     order_within_levels,
 )
 from recfold.models import DagEdge, DagNode
@@ -198,3 +199,25 @@ def test_compute_canvas_size_covers_every_node_with_margin():
     for x, y in pos.values():
         assert 10 <= x - 50 and x + 50 <= width - 10
         assert 10 <= y - 20 and y + 20 <= height - 10
+
+
+def test_edge_segments_run_from_source_bottom_to_target_top():
+    pos = {"a": (100.0, 50.0), "b": (60.0, 150.0)}
+    segs = edge_segments(pos, edges(("a", "b")), node_height=40)
+    assert segs == [("a", "b", 100.0, 70.0, 60.0, 130.0)]
+
+
+def test_edge_segments_keep_edge_order_and_allow_shared_child():
+    pos = {"a": (50.0, 20.0), "b": (150.0, 20.0), "c": (100.0, 120.0)}
+    segs = edge_segments(pos, edges(("b", "c"), ("a", "c")), node_height=40)
+    assert [(s[0], s[1]) for s in segs] == [("b", "c"), ("a", "c")]
+
+
+def test_edge_segments_skip_unknown_ids():
+    pos = {"a": (0.0, 0.0), "b": (0.0, 100.0)}
+    segs = edge_segments(pos, edges(("a", "b"), ("a", "nope"), ("nope", "b")), node_height=48)
+    assert len(segs) == 1 and segs[0][:2] == ("a", "b")
+
+
+def test_edge_segments_empty():
+    assert edge_segments({}, []) == []

@@ -177,3 +177,24 @@ def compute_canvas_size(
     width = max(x for x, _ in positions.values()) + node_width / 2 + margin
     height = max(y for _, y in positions.values()) + node_height / 2 + margin
     return (float(width), float(height))
+
+
+def edge_segments(
+    positions: Dict[str, Tuple[float, float]],
+    dag_edges: Iterable[DagEdge],
+    node_height: float = 48,
+) -> List[Tuple[str, str, float, float, float, float]]:
+    """Return one (source_id, target_id, x1, y1, x2, y2) line per edge.
+
+    Each line starts at the bottom-centre of the source node and ends at the
+    top-centre of the target node. Edges naming unknown nodes are skipped; the
+    order of dag_edges is kept.
+    """
+    half = node_height / 2
+    segments = []
+    for edge in dag_edges:
+        if edge.source_id in positions and edge.target_id in positions:
+            x1, y1 = positions[edge.source_id]
+            x2, y2 = positions[edge.target_id]
+            segments.append((edge.source_id, edge.target_id, x1, y1 + half, x2, y2 - half))
+    return segments
