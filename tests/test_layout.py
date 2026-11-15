@@ -1,6 +1,6 @@
 import pytest
 
-from recfold.layout import compute_levels, order_within_levels
+from recfold.layout import assign_coordinates, compute_levels, order_within_levels
 from recfold.models import DagEdge, DagNode
 
 
@@ -91,3 +91,39 @@ def test_order_within_levels_is_deterministic():
     levels = {"r": 0, "a": 1, "b": 1, "c": 2, "d": 2}
     es = edges(("r", "a"), ("r", "b"), ("a", "d"), ("b", "c"))
     assert order_within_levels(levels, es) == order_within_levels(dict(levels), list(es))
+
+
+def test_assign_coordinates_empty():
+    assert assign_coordinates([]) == {}
+
+
+def test_assign_coordinates_single_node_defaults():
+    # margin 20, node 140x48 -> center at (20 + 70, 20 + 24)
+    assert assign_coordinates([["a"]]) == {"a": (90.0, 44.0)}
+
+
+def test_assign_coordinates_row_spacing_and_levels():
+    pos = assign_coordinates(
+        [["a"], ["b", "c"]], node_width=100, node_height=40, h_gap=20, v_gap=60, margin=10
+    )
+    # widest row is level 1: 100 + 20 + 100 = 220 wide
+    # level 1 centre y = margin 10 + (node 40 + v_gap 60) + half node 20
+    assert pos["b"] == (60.0, 130.0)
+    assert pos["c"] == (180.0, 130.0)
+    # level 0 is centered over the wide row
+    assert pos["a"] == (120.0, 30.0)
+
+
+def test_assign_coordinates_nodes_in_row_never_overlap():
+    layers = [["a"], ["b", "c", "d"], ["e", "f"]]
+    pos = assign_coordinates(layers, node_width=80, h_gap=10)
+    for row in layers:
+        xs = [pos[n][0] for n in row]
+        for left, right in zip(xs, xs[1:]):
+            assert right - left >= 80 + 10
+
+
+def test_assign_coordinates_left_to_right_follows_row_order():
+    pos = assign_coordinates([["z", "a", "m"]])
+    assert pos["z"][0] < pos["a"][0] < pos["m"][0]
+    assert pos["z"][1] == pos["a"][1] == pos["m"][1]

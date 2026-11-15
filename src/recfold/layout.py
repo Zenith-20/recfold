@@ -103,3 +103,30 @@ def order_within_levels(
         if score < best_score:
             best, best_score = [list(row) for row in layers], score
     return best
+
+
+def assign_coordinates(
+    layers: List[List[str]],
+    node_width: float = 140,
+    node_height: float = 48,
+    h_gap: float = 40,
+    v_gap: float = 70,
+    margin: float = 20,
+) -> Dict[str, Tuple[float, float]]:
+    """Return the (x, y) centre of every node, in pixels (y grows downward).
+
+    Row r sits at the same height for all its nodes; each row is centred on the
+    widest row, with h_gap between neighbours and v_gap between rows.
+    """
+    if not layers:
+        return {}
+    step = node_width + h_gap
+    widest = max(len(row) for row in layers) * step - h_gap
+    positions: Dict[str, Tuple[float, float]] = {}
+    for level, row in enumerate(layers):
+        row_width = len(row) * step - h_gap
+        start_x = margin + (widest - row_width) / 2
+        y = margin + level * (node_height + v_gap) + node_height / 2
+        for index, node_id in enumerate(row):
+            positions[node_id] = (start_x + index * step + node_width / 2, float(y))
+    return positions
