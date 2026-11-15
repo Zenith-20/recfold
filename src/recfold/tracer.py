@@ -2,7 +2,8 @@
 
 from typing import Any, Dict, Optional, Set, Tuple
 
-from recfold.snapshot import safe_repr
+from recfold.models import CallNode, TraceSession
+from recfold.snapshot import make_entry_snapshot, safe_repr
 
 
 def make_call_key(
@@ -28,3 +29,33 @@ def check_recursion_guards(
         raise RecursionError(f"Maximum trace depth ({max_depth}) exceeded")
     if detect_cycles and call_key in active_keys:
         raise RecursionError(f"Infinite recursion cycle detected in '{call_key[0]}'")
+
+
+def start_call_node(
+    session: TraceSession,
+    node_id: str,
+    func_name: str,
+    args: Tuple[Any, ...],
+    kwargs: Dict[str, Any],
+    depth: int,
+    parent_id: Optional[str] = None,
+    max_repr_len: int = 80,
+) -> CallNode:
+    """Create a CallNode, capture its entry snapshot, and link it in session."""
+    entry_snap = make_entry_snapshot(args, kwargs, max_len=max_repr_len)
+    node = CallNode(
+        node_id=node_id,
+        func_name=func_name,
+        args=entry_snap["args"],
+        kwargs=entry_snap["kwargs"],
+        depth=depth,
+        parent_id=parent_id,
+        entry_snapshot=entry_snap,
+    )
+    session.nodes[node_id] = node
+    if parent_id is None:
+        if session.root_id is None:
+            session.root_id = node_id
+    elif parent_id in session.nodes:
+        session.nodes[parent_id].children_ids.append(node_id)
+    return node
