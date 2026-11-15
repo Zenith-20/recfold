@@ -1,6 +1,6 @@
 import pytest
 
-from recfold.layout import compute_levels
+from recfold.layout import compute_levels, order_within_levels
 from recfold.models import DagEdge, DagNode
 
 
@@ -47,3 +47,47 @@ def test_compute_levels_raises_on_cycle():
     nodes = make_nodes("a", "b", "c")
     with pytest.raises(ValueError):
         compute_levels(nodes, edges(("a", "b"), ("b", "c"), ("c", "b")))
+
+
+def count_crossings(layers, es):
+    pos = {n: i for row in layers for i, n in enumerate(row)}
+    row_of = {n: r for r, row in enumerate(layers) for n in row}
+    pairs = [(row_of[e.source_id], pos[e.source_id], pos[e.target_id]) for e in es
+             if e.source_id in pos and e.target_id in pos and row_of[e.target_id] == row_of[e.source_id] + 1]
+    crossings = 0
+    for i, (r1, s1, t1) in enumerate(pairs):
+        for r2, s2, t2 in pairs[i + 1:]:
+            if r1 == r2 and (s1 - s2) * (t1 - t2) < 0:
+                crossings += 1
+    return crossings
+
+
+def test_order_within_levels_empty():
+    assert order_within_levels({}, []) == []
+
+
+def test_order_within_levels_groups_by_level_sorted_by_id():
+    assert order_within_levels({"b": 0, "a": 0, "c": 1}, []) == [["a", "b"], ["c"]]
+
+
+def test_order_within_levels_removes_simple_crossing():
+    levels = {"a": 0, "b": 0, "x": 1, "y": 1}
+    es = edges(("a", "y"), ("b", "x"))
+    layers = order_within_levels(levels, es)
+    assert layers[0] == ["a", "b"]
+    assert layers[1] == ["y", "x"]
+    assert count_crossings(layers, es) == 0
+
+
+def test_order_within_levels_keeps_every_node_exactly_once():
+    levels = {"r": 0, "a": 1, "b": 1, "c": 1, "d": 2, "e": 2}
+    es = edges(("r", "a"), ("r", "b"), ("r", "c"), ("a", "e"), ("c", "d"), ("b", "d"))
+    layers = order_within_levels(levels, es)
+    assert sorted(n for row in layers for n in row) == sorted(levels)
+    assert [len(r) for r in layers] == [1, 3, 2]
+
+
+def test_order_within_levels_is_deterministic():
+    levels = {"r": 0, "a": 1, "b": 1, "c": 2, "d": 2}
+    es = edges(("r", "a"), ("r", "b"), ("a", "d"), ("b", "c"))
+    assert order_within_levels(levels, es) == order_within_levels(dict(levels), list(es))
