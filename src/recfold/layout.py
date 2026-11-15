@@ -163,3 +163,17 @@ def center_over_children(
             result[node_id] = (x, y)
             previous_x = x
     return result
+
+
+def compute_canvas_size(
+    positions: Dict[str, Tuple[float, float]],
+    node_width: float = 140,
+    node_height: float = 48,
+    margin: float = 20,
+) -> Tuple[float, float]:
+    """Return (width, height) of the drawing area that fits every node plus margin."""
+    if not positions:
+        return (2.0 * margin, 2.0 * margin)
+    width = max(x for x, _ in positions.values()) + node_width / 2 + margin
+    height = max(y for _, y in positions.values()) + node_height / 2 + margin
+    return (float(width), float(height))

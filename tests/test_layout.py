@@ -3,6 +3,7 @@ import pytest
 from recfold.layout import (
     assign_coordinates,
     center_over_children,
+    compute_canvas_size,
     compute_levels,
     order_within_levels,
 )
@@ -177,3 +178,23 @@ def test_center_over_children_nodes_without_children_stay_put():
     moved = center_over_children(layers, pos, edges(("x", "a")), min_step=120)
     assert moved["x"][0] == 60.0  # x moves over its only child a
     assert moved["y"] == pos["y"]  # y has no children, so it stays
+
+
+def test_compute_canvas_size_empty_is_just_margins():
+    assert compute_canvas_size({}, margin=15) == (30.0, 30.0)
+
+
+def test_compute_canvas_size_single_node_matches_default_layout():
+    pos = assign_coordinates([["a"]])
+    assert compute_canvas_size(pos) == (180.0, 88.0)  # 140+2*20, 48+2*20
+
+
+def test_compute_canvas_size_covers_every_node_with_margin():
+    layers = [["a"], ["b", "c", "d"]]
+    pos = assign_coordinates(layers, **SPACING)
+    width, height = compute_canvas_size(pos, node_width=100, node_height=40, margin=10)
+    assert width == 10 + 3 * 100 + 2 * 20 + 10
+    assert height == 10 + 40 + 60 + 40 + 10
+    for x, y in pos.values():
+        assert 10 <= x - 50 and x + 50 <= width - 10
+        assert 10 <= y - 20 and y + 20 <= height - 10
