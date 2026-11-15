@@ -6,6 +6,7 @@ from recfold.tracer import (
     finish_call_node,
     make_call_key,
     start_call_node,
+    trace,
 )
 
 
@@ -96,3 +97,39 @@ def test_finish_call_node_records_result_and_errors():
 
     assert err_node.result is None
     assert err_node.exit_snapshot["error"] == "ValueError: negative input"
+
+
+def test_trace_decorator_records_tree_and_enforces_guards():
+    @trace
+    def fib(n: int) -> int:
+        if n <= 1:
+            return n
+        return fib(n - 1) + fib(n - 2)
+
+    assert fib(3) == 2
+    session = fib.last_session
+    assert session is not None
+    assert session.func_name == "fib"
+    assert session.root_id == "1"
+    # fib(3) calls fib(2) [which calls fib(1), fib(0)] and fib(1) -> 5 calls total
+    assert len(session.nodes) == 5
+    assert session.nodes["1"].result == 2
+    assert session.nodes["1"].children_ids == ["2", "5"]
+
+    @trace(max_depth=2)
+    def countdown(n: int) -> int:
+        if n == 0:
+            return 0
+        return countdown(n - 1)
+
+    with pytest.raises(RecursionError, match="Maximum trace depth"):
+        countdown(5)
+
+    @trace
+    def infinite(x: int) -> int:
+        return infinite(x)
+
+    with pytest.raises(RecursionError, match="Infinite recursion cycle"):
+        infinite(1)
+    assert infinite.last_session is not None
+    assert infinite.last_session.root_id == "1"

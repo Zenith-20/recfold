@@ -1,9 +1,13 @@
 """Pure-Python recursion tracing decorator and safety guards for recfold."""
 
-from typing import Any, Dict, Optional, Set, Tuple
+from contextvars import ContextVar
+import functools
+from typing import Any, Callable, Dict, Optional, Set, Tuple
 
 from recfold.models import CallNode, TraceSession
 from recfold.snapshot import make_entry_snapshot, make_exit_snapshot, safe_repr
+
+_ACTIVE_TRACE: ContextVar[Optional[Dict[str, Any]]] = ContextVar("_ACTIVE_TRACE", default=None)
 
 
 def make_call_key(
@@ -72,3 +76,83 @@ def finish_call_node(
     node.result = exit_snap["result"]
     node.exit_snapshot = exit_snap
     return node
+
+
+def trace(
+    func: Optional[Callable[..., Any]] = None,
+    *,
+    max_depth: Optional[int] = 100,
+    detect_cycles: bool = True,
+    max_repr_len: int = 80,
+) -> Any:
+    """Decorator that records a recursive function's call tree into a TraceSession."""
+
+    def decorator(target_func: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(target_func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            current_state = _ACTIVE_TRACE.get()
+            if current_state is None:
+                session = TraceSession(func_name=target_func.__name__)
+                state: Dict[str, Any] = {
+                    "session": session,
+                    "stack": [],
+                    "active_keys": set(),
+                    "counter": 0,
+                }
+                token = _ACTIVE_TRACE.set(state)
+                is_root = True
+            else:
+                state = current_state
+                session = state["session"]
+                token = None
+                is_root = False
+
+            try:
+                depth = len(state["stack"])
+                call_key = make_call_key(target_func.__name__, args, kwargs)
+                check_recursion_guards(
+                    depth=depth,
+                    max_depth=max_depth,
+                    call_key=call_key,
+                    active_keys=state["active_keys"],
+                    detect_cycles=detect_cycles,
+                )
+
+                state["counter"] += 1
+                node_id = str(state["counter"])
+                parent_id = state["stack"][-1] if state["stack"] else None
+                node = start_call_node(
+                    session=session,
+                    node_id=node_id,
+                    func_name=target_func.__name__,
+                    args=args,
+                    kwargs=kwargs,
+                    depth=depth,
+                    parent_id=parent_id,
+                    max_repr_len=max_repr_len,
+                )
+
+                state["stack"].append(node_id)
+                state["active_keys"].add(call_key)
+                try:
+                    result = target_func(*args, **kwargs)
+                except BaseException as exc:
+                    finish_call_node(node, error=exc, max_repr_len=max_repr_len)
+                    raise
+                else:
+                    finish_call_node(node, result=result, max_repr_len=max_repr_len)
+                    return result
+                finally:
+                    state["stack"].pop()
+                    state["active_keys"].discard(call_key)
+            finally:
+                if is_root and token is not None:
+                    wrapper.last_session = session  # type: ignore[attr-defined]
+                    _ACTIVE_TRACE.reset(token)
+
+        wrapper.last_session = None  # type: ignore[attr-defined]
+        return wrapper
+
+    if func is not None:
+        return decorator(func)
+    return decorator
