@@ -1,9 +1,10 @@
 """Pure-Python 2D layout for recfold DAGs: assigns (x, y) pixel coordinates."""
 
 from collections import deque
+from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Tuple
 
-from recfold.models import DagEdge, DagNode
+from recfold.models import DagEdge, DagNode, TraceSession
 
 
 def compute_levels(dag_nodes: Dict[str, DagNode], dag_edges: Iterable[DagEdge]) -> Dict[str, int]:
@@ -198,3 +199,56 @@ def edge_segments(
             x2, y2 = positions[edge.target_id]
             segments.append((edge.source_id, edge.target_id, x1, y1 + half, x2, y2 - half))
     return segments
+
+
+@dataclass
+class LayoutResult:
+    """Everything the renderer needs to draw a DAG. Units are pixels, y grows downward.
+
+    positions maps node id to the (x, y) centre of its box; segments are the
+    (source_id, target_id, x1, y1, x2, y2) edge lines; width and height are the
+    drawing area; node_width and node_height are the box size used.
+    """
+
+    positions: Dict[str, Tuple[float, float]] = field(default_factory=dict)
+    levels: Dict[str, int] = field(default_factory=dict)
+    segments: List[Tuple[str, str, float, float, float, float]] = field(default_factory=list)
+    width: float = 0.0
+    height: float = 0.0
+    node_width: float = 140
+    node_height: float = 48
+
+
+def layout_dag(
+    dag_nodes: Dict[str, DagNode],
+    dag_edges: Iterable[DagEdge],
+    node_width: float = 140,
+    node_height: float = 48,
+    h_gap: float = 40,
+    v_gap: float = 70,
+    margin: float = 20,
+) -> LayoutResult:
+    """Lay out a DAG: levels, left-to-right order, coordinates, canvas and edge lines.
+
+    Raises ValueError if the edges contain a cycle.
+    """
+    edge_list = list(dag_edges)
+    levels = compute_levels(dag_nodes, edge_list)
+    layers = order_within_levels(levels, edge_list)
+    positions = assign_coordinates(layers, node_width, node_height, h_gap, v_gap, margin)
+    positions = center_over_children(layers, positions, edge_list, node_width + h_gap)
+    width, height = compute_canvas_size(positions, node_width, node_height, margin)
+    return LayoutResult(
+        positions=positions,
+        levels=levels,
+        segments=edge_segments(positions, edge_list, node_height),
+        width=width,
+        height=height,
+        node_width=node_width,
+        node_height=node_height,
+    )
+
+
+def layout_session(session: TraceSession, **options: float) -> LayoutResult:
+    """Lay out the DAG stored on a TraceSession; options are passed to layout_dag."""
+    return layout_dag(session.dag_nodes, session.dag_edges, **options)

@@ -5,10 +5,13 @@ from recfold.layout import (
     center_over_children,
     compute_canvas_size,
     compute_levels,
+    LayoutResult,
     edge_segments,
+    layout_dag,
+    layout_session,
     order_within_levels,
 )
-from recfold.models import DagEdge, DagNode
+from recfold.models import DagEdge, DagNode, TraceSession
 
 
 def make_nodes(*ids):
@@ -221,3 +224,64 @@ def test_edge_segments_skip_unknown_ids():
 
 def test_edge_segments_empty():
     assert edge_segments({}, []) == []
+
+
+def fib_dag():
+    """Memoized fib(4): shared subcalls are single nodes."""
+    nodes = make_nodes("f4", "f3", "f2", "f1", "f0")
+    es = edges(("f4", "f3"), ("f4", "f2"), ("f3", "f2"), ("f3", "f1"), ("f2", "f1"), ("f2", "f0"))
+    return nodes, es
+
+
+def test_layout_dag_empty():
+    result = layout_dag({}, [])
+    assert isinstance(result, LayoutResult)
+    assert result.positions == {} and result.levels == {} and result.segments == []
+    assert (result.width, result.height) == (40.0, 40.0)
+
+
+def test_layout_dag_fib_parents_above_children_and_no_overlap():
+    nodes, es = fib_dag()
+    result = layout_dag(nodes, es)
+    assert result.levels == {"f4": 0, "f3": 1, "f2": 2, "f1": 3, "f0": 3}
+    for e in es:
+        assert result.positions[e.source_id][1] < result.positions[e.target_id][1]
+    by_row = {}
+    for node_id, (x, y) in result.positions.items():
+        by_row.setdefault(y, []).append(x)
+    for xs in by_row.values():
+        xs.sort()
+        for left, right in zip(xs, xs[1:]):
+            assert right - left >= result.node_width + 40  # default h_gap
+    assert len(result.segments) == len(es)
+
+
+def test_layout_dag_everything_fits_inside_canvas():
+    nodes, es = fib_dag()
+    r = layout_dag(nodes, es, node_width=100, node_height=40, h_gap=20, v_gap=60, margin=10)
+    for x, y in r.positions.values():
+        assert x - 50 >= 10 and x + 50 <= r.width - 10
+        assert y - 20 >= 10 and y + 20 <= r.height - 10
+    assert (r.node_width, r.node_height) == (100, 40)
+
+
+def test_layout_dag_is_deterministic():
+    nodes, es = fib_dag()
+    assert layout_dag(nodes, es) == layout_dag(dict(nodes), list(es))
+
+
+def test_layout_dag_accepts_edge_generator():
+    nodes, es = fib_dag()
+    assert layout_dag(nodes, iter(es)) == layout_dag(nodes, es)
+
+
+def test_layout_dag_raises_on_cycle():
+    with pytest.raises(ValueError):
+        layout_dag(make_nodes("a", "b"), edges(("a", "b"), ("b", "a")))
+
+
+def test_layout_session_uses_session_dag():
+    nodes, es = fib_dag()
+    session = TraceSession(func_name="fib", dag_nodes=nodes, dag_edges=es)
+    assert layout_session(session) == layout_dag(nodes, es)
+    assert layout_session(session, margin=5).width != layout_session(session).width
