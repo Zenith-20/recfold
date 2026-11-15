@@ -3,6 +3,7 @@ import pytest
 from recfold.models import TraceSession
 from recfold.tracer import (
     check_recursion_guards,
+    finish_call_node,
     make_call_key,
     start_call_node,
 )
@@ -73,3 +74,25 @@ def test_start_call_node_links_root_and_children():
     assert root.children_ids == ["2"]
     assert child.parent_id == "1"
     assert child.depth == 1
+
+
+def test_finish_call_node_records_result_and_errors():
+    session = TraceSession(func_name="solve")
+    node = start_call_node(session, "1", "solve", (3,), {}, depth=0)
+
+    ret_val = [10, 20]
+    finish_call_node(node, result=ret_val)
+    ret_val.append(30)  # Mutate original return list afterward
+
+    assert node.result == [10, 20]
+    assert node.exit_snapshot == {
+        "result": [10, 20],
+        "result_repr": "[10, 20]",
+        "error": None,
+    }
+
+    err_node = start_call_node(session, "2", "solve", (-1,), {}, depth=1, parent_id="1")
+    finish_call_node(err_node, error=ValueError("negative input"))
+
+    assert err_node.result is None
+    assert err_node.exit_snapshot["error"] == "ValueError: negative input"

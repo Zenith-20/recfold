@@ -3,7 +3,7 @@
 from typing import Any, Dict, Optional, Set, Tuple
 
 from recfold.models import CallNode, TraceSession
-from recfold.snapshot import make_entry_snapshot, safe_repr
+from recfold.snapshot import make_entry_snapshot, make_exit_snapshot, safe_repr
 
 
 def make_call_key(
@@ -58,4 +58,17 @@ def start_call_node(
             session.root_id = node_id
     elif parent_id in session.nodes:
         session.nodes[parent_id].children_ids.append(node_id)
+    return node
+
+
+def finish_call_node(
+    node: CallNode,
+    result: Any = None,
+    error: Optional[BaseException] = None,
+    max_repr_len: int = 80,
+) -> CallNode:
+    """Record the return value or exception snapshot on a completed CallNode."""
+    exit_snap = make_exit_snapshot(result, error=error, max_len=max_repr_len)
+    node.result = exit_snap["result"]
+    node.exit_snapshot = exit_snap
     return node
