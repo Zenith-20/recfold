@@ -5,6 +5,7 @@ from recfold.tracer import (
     check_recursion_guards,
     finish_call_node,
     make_call_key,
+    run_traced,
     start_call_node,
     trace,
 )
@@ -133,3 +134,27 @@ def test_trace_decorator_records_tree_and_enforces_guards():
         infinite(1)
     assert infinite.last_session is not None
     assert infinite.last_session.root_id == "1"
+
+
+def test_run_traced_supports_plain_and_decorated_functions():
+    def fact(n: int) -> int:
+        if n <= 1:
+            return 1
+        return n * fact(n - 1)
+
+    result, session = run_traced(fact, 4)
+    assert result == 24
+    assert isinstance(session, TraceSession)
+    assert session.root_id == "1"
+    assert len(session.nodes) == 4
+    assert session.nodes["1"].result == 24
+
+    @trace
+    def fib(n: int) -> int:
+        if n <= 1:
+            return n
+        return fib(n - 1) + fib(n - 2)
+
+    fib_res, fib_session = run_traced(fib, 3)
+    assert fib_res == 2
+    assert len(fib_session.nodes) == 5

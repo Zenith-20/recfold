@@ -156,3 +156,53 @@ def trace(
     if func is not None:
         return decorator(func)
     return decorator
+
+def run_traced(
+    func: Callable[..., Any],
+    *args: Any,
+    max_depth: Optional[int] = 100,
+    detect_cycles: bool = True,
+    max_repr_len: int = 80,
+    **kwargs: Any,
+) -> Tuple[Any, TraceSession]:
+    """Execute a traced or plain recursive function and return (result, TraceSession)."""
+    if hasattr(func, "last_session"):
+        result = func(*args, **kwargs)
+        return result, func.last_session  # type: ignore[attr-defined]
+
+    traced_func = trace(
+        max_depth=max_depth,
+        detect_cycles=detect_cycles,
+        max_repr_len=max_repr_len,
+    )(func)
+
+    func_globals = getattr(func, "__globals__", None)
+    func_name = getattr(func, "__name__", None)
+    rebound_global = (
+        isinstance(func_globals, dict)
+        and isinstance(func_name, str)
+        and func_globals.get(func_name) is func
+    )
+
+    rebound_cells = []
+    for cell in getattr(func, "__closure__", None) or ():
+        try:
+            if cell.cell_contents is func:
+                rebound_cells.append(cell)
+        except ValueError:
+            continue
+
+    if rebound_global:
+        func_globals[func_name] = traced_func
+    for cell in rebound_cells:
+        cell.cell_contents = traced_func
+
+    try:
+        result = traced_func(*args, **kwargs)
+    finally:
+        for cell in rebound_cells:
+            cell.cell_contents = func
+        if rebound_global:
+            func_globals[func_name] = func
+
+    return result, traced_func.last_session  # type: ignore[attr-defined]
