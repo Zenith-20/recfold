@@ -130,3 +130,36 @@ def assign_coordinates(
         for index, node_id in enumerate(row):
             positions[node_id] = (start_x + index * step + node_width / 2, float(y))
     return positions
+
+
+def center_over_children(
+    layers: List[List[str]],
+    positions: Dict[str, Tuple[float, float]],
+    dag_edges: Iterable[DagEdge],
+    min_step: float,
+) -> Dict[str, Tuple[float, float]]:
+    """Return new positions with each parent shifted over the mean x of its children.
+
+    Rows are processed from the bottom up. Nodes without children keep their x.
+    Left-to-right order is kept, and neighbours in a row stay at least min_step
+    apart (distance between centres), so nothing overlaps. y values and the
+    input dict are never changed.
+    """
+    result = dict(positions)
+    kids: Dict[str, List[str]] = {}
+    for edge in dag_edges:
+        if edge.source_id in positions and edge.target_id in positions:
+            kids.setdefault(edge.source_id, []).append(edge.target_id)
+
+    for row in reversed(layers[:-1]):
+        previous_x = None
+        for node_id in row:
+            x, y = result[node_id]
+            children = kids.get(node_id)
+            if children:
+                x = sum(result[c][0] for c in children) / len(children)
+            if previous_x is not None and x < previous_x + min_step:
+                x = previous_x + min_step
+            result[node_id] = (x, y)
+            previous_x = x
+    return result

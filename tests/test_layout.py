@@ -1,6 +1,11 @@
 import pytest
 
-from recfold.layout import assign_coordinates, compute_levels, order_within_levels
+from recfold.layout import (
+    assign_coordinates,
+    center_over_children,
+    compute_levels,
+    order_within_levels,
+)
 from recfold.models import DagEdge, DagNode
 
 
@@ -127,3 +132,48 @@ def test_assign_coordinates_left_to_right_follows_row_order():
     pos = assign_coordinates([["z", "a", "m"]])
     assert pos["z"][0] < pos["a"][0] < pos["m"][0]
     assert pos["z"][1] == pos["a"][1] == pos["m"][1]
+
+
+SPACING = dict(node_width=100, node_height=40, h_gap=20, v_gap=60, margin=10)
+
+
+def test_center_over_children_moves_parents_to_children_mean():
+    layers = [["x", "y"], ["a", "b", "c", "d"]]
+    es = edges(("x", "a"), ("x", "b"), ("y", "c"), ("y", "d"))
+    pos = assign_coordinates(layers, **SPACING)
+    moved = center_over_children(layers, pos, es, min_step=120)
+    assert moved["x"][0] == 120.0  # mean of a (60) and b (180)
+    assert moved["y"][0] == 360.0  # mean of c (300) and d (420)
+
+
+def test_center_over_children_keeps_rows_apart():
+    layers = [["p", "q"], ["a", "b"]]
+    es = edges(("p", "a"), ("p", "b"), ("q", "a"), ("q", "b"))
+    pos = assign_coordinates(layers, **SPACING)
+    moved = center_over_children(layers, pos, es, min_step=120)
+    assert moved["q"][0] - moved["p"][0] >= 120
+    assert moved["p"][0] < moved["q"][0]
+
+
+def test_center_over_children_leaves_bottom_row_and_y_untouched():
+    layers = [["x"], ["a", "b"]]
+    pos = assign_coordinates(layers, **SPACING)
+    moved = center_over_children(layers, pos, edges(("x", "a")), min_step=120)
+    assert moved["a"] == pos["a"] and moved["b"] == pos["b"]
+    assert all(moved[n][1] == pos[n][1] for n in pos)
+
+
+def test_center_over_children_does_not_mutate_input():
+    layers = [["x", "y"], ["a", "b", "c", "d"]]
+    pos = assign_coordinates(layers, **SPACING)
+    before = dict(pos)
+    center_over_children(layers, pos, edges(("x", "a")), min_step=120)
+    assert pos == before
+
+
+def test_center_over_children_nodes_without_children_stay_put():
+    layers = [["x", "y"], ["a", "b", "c", "d"]]
+    pos = assign_coordinates(layers, **SPACING)
+    moved = center_over_children(layers, pos, edges(("x", "a")), min_step=120)
+    assert moved["x"][0] == 60.0  # x moves over its only child a
+    assert moved["y"] == pos["y"]  # y has no children, so it stays
