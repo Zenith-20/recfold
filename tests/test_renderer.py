@@ -330,3 +330,49 @@ def test_browser_hostile_values_are_text_and_mobile_fits(browser_page):
     assert page.locator('img').count() == 0
     assert page.evaluate('window.injected === undefined')
     assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+
+
+def test_widget_notebook_representation_uses_isolated_srcdoc(fib_session):
+    from recfold.renderer import RecursionWidget, render_html
+
+    document = render_html(fib_session)
+    widget = RecursionWidget(document, height=620)
+    parser = DocumentParser()
+    parser.feed(widget._repr_html_())
+    frames = [attrs for tag, attrs in parser.tags if tag == "iframe"]
+    assert len(frames) == 1
+    assert frames[0]["sandbox"] == "allow-scripts"
+    assert frames[0]["srcdoc"] == document
+    assert frames[0]["height"] == "620"
+    assert frames[0]["title"]
+    assert not any(tag == "script" for tag, _ in parser.tags)
+
+
+@pytest.mark.parametrize("height", [0, -1, 319, 3.5, True, '500" onload="alert(1)'])
+def test_widget_rejects_invalid_height(height):
+    from recfold.renderer import RecursionWidget
+
+    with pytest.raises(ValueError, match="height"):
+        RecursionWidget("<html></html>", height=height)._repr_html_()
+
+
+def test_browser_two_notebook_widgets_are_independent(browser_page, fib_session):
+    from recfold.renderer import RecursionWidget, render_html
+
+    page = browser_page
+    html = RecursionWidget(render_html(fib_session))._repr_html_()
+    page.set_content(html + html)
+    first = page.frame_locator('iframe').nth(0)
+    second = page.frame_locator('iframe').nth(1)
+    first.get_by_role('button', name='Call tree', exact=True).click()
+    assert first.locator('.rf-view:not([hidden]) [data-node-id]').count() == 9
+    assert second.locator('.rf-view:not([hidden]) [data-node-id]').count() == 5
+    first.locator('.rf-view:not([hidden]) [data-node-id="1"]').click()
+    assert "Call #1" in first.locator('#rf-details').inner_text()
+    assert second.locator('#rf-details').inner_text() == ""
+    # allow-scripts without allow-same-origin must block host DOM access.
+    frame = page.frames[1]
+    assert frame.evaluate('''() => {
+        try { return parent.document.body === null; }
+        catch (error) { return error.name === 'SecurityError'; }
+    }''')

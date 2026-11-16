@@ -1,6 +1,6 @@
 """Dependency-free HTML/SVG rendering of recorded recursion sessions."""
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, field
 from html import escape
 import json
 import math
@@ -447,3 +447,28 @@ def render_html(
         f'<script type="application/json" id="rf-data">{payload}</script>'
         f'<script>{_SCRIPT}</script></body></html>'
     )
+
+
+@dataclass(frozen=True)
+class RecursionWidget:
+    """A captured HTML visualization displayed by Jupyter's rich HTML protocol.
+
+    Each output runs in a separate sandboxed iframe, so its styles, element
+    IDs, and JavaScript cannot collide with other cells or access the host DOM.
+    No IPython or ipywidgets import is needed. The HTML is captured at creation
+    time: later changes to the original session do not update this widget.
+    """
+
+    html: str = field(repr=False)
+    height: int = 560
+
+    def _repr_html_(self) -> str:
+        """Return a notebook-safe iframe; height must be an integer >= 320."""
+        if type(self.height) is not int or self.height < 320:
+            raise ValueError("height must be an integer of at least 320 pixels")
+        return (
+            '<iframe title="recfold interactive recursion map" sandbox="allow-scripts" '
+            f'width="100%" height="{self.height}" '
+            'style="width:100%;border:1px solid #dbe5ec;border-radius:12px;" '
+            f'srcdoc="{escape(self.html, quote=True)}"></iframe>'
+        )
