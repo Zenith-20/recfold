@@ -399,3 +399,36 @@ def test_widget_save_preserves_existing_file_unless_overwrite_requested(tmp_path
     assert destination.read_text(encoding="utf-8") == "original"
     widget.save(destination, overwrite=True)
     assert destination.read_text(encoding="utf-8") == "replacement"
+
+
+def test_render_session_returns_displayable_widget_without_mutation(fib_session):
+    from recfold.renderer import RecursionWidget, render_session
+
+    before = copy.deepcopy(fib_session)
+    widget = render_session(fib_session, title="Fibonacci", height=640)
+    assert isinstance(widget, RecursionWidget)
+    assert widget.height == 640
+    assert "Fibonacci" in widget.html
+    assert "<iframe" in widget._repr_html_()
+    assert fib_session == before
+    # Rich display must not dump the entire embedded document as plain text.
+    assert len(repr(widget)) < 100
+
+
+def test_render_session_accepts_precomputed_layout(fib_session):
+    from recfold.analyzer import analyze_session
+    from recfold.renderer import render_session
+
+    analyze_session(fib_session)
+    layout = layout_session(fib_session, node_width=180)
+    widget = render_session(fib_session, layout)
+    parser = DocumentParser()
+    parser.feed(widget.html)
+    assert json.loads(parser.payload)["dag"]["node_width"] == 180
+
+
+def test_render_session_rejects_bad_height_before_rendering(fib_session):
+    from recfold.renderer import render_session
+
+    with pytest.raises(ValueError, match="height"):
+        render_session(fib_session, height="500")

@@ -485,3 +485,21 @@ class RecursionWidget:
         with destination.open("w" if overwrite else "x", encoding="utf-8") as output:
             output.write(self.html)
         return destination
+
+
+def render_session(
+    session: TraceSession,
+    layout: Optional[LayoutResult] = None,
+    *,
+    title: Optional[str] = None,
+    height: int = 560,
+) -> RecursionWidget:
+    """Create a widget: put it last in a notebook cell or call display(widget).
+
+    A raw TraceSession from trace/run_traced is sufficient; analysis and layout
+    are computed without modifying it. An optional precomputed DAG layout is
+    accepted. Use widget.save(path) to export an interactive standalone file.
+    """
+    if type(height) is not int or height < 320:
+        raise ValueError("height must be an integer of at least 320 pixels")
+    return RecursionWidget(render_html(session, layout, title=title), height=height)
