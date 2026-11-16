@@ -1,7 +1,9 @@
 """Renderer contracts: real traces, safe output, and notebook integration."""
 
 import copy
+from html.parser import HTMLParser
 import json
+import os
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -200,3 +202,131 @@ def test_render_svg_shows_edge_multiplicity_and_error_style():
     svg = render_svg(build_render_data(parent.last_session))
     assert ">x2<" in svg
     assert 'class="rf-node rf-error"' in svg
+
+
+class DocumentParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.tags = []
+        self.payload = ""
+        self.in_payload = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        self.tags.append((tag, attrs))
+        if tag == "script" and attrs.get("id") == "rf-data":
+            self.in_payload = True
+
+    def handle_endtag(self, tag):
+        if tag == "script":
+            self.in_payload = False
+
+    def handle_data(self, data):
+        if self.in_payload:
+            self.payload += data
+
+
+def test_render_html_is_self_contained_with_both_views(fib_session):
+    from recfold.renderer import render_html
+
+    html = render_html(fib_session, title="My recursion")
+    parser = DocumentParser()
+    parser.feed(html)
+    payload = json.loads(parser.payload)
+    assert len(payload["dag"]["nodes"]) == 5
+    assert len(payload["tree"]["nodes"]) == 9
+    assert html.startswith("<!DOCTYPE html>")
+    assert "My recursion" in html
+    assert "Select a call" in html
+    assert "JavaScript" in html  # static fallback guidance
+    assert not any(tag == "script" and "src" in attrs for tag, attrs in parser.tags)
+    assert not any(tag == "link" for tag, _ in parser.tags)
+
+
+def test_render_html_cannot_close_script_or_inject_markup():
+    from recfold.renderer import render_html
+
+    hostile = '</script><script>window.injected=true</script><img src=x onerror="alert(1)">\u2028&'
+    session = TraceSession(hostile, {"1": CallNode("1", hostile, args=(hostile,))}, root_id="1")
+    html = render_html(session, title=hostile)
+    parser = DocumentParser()
+    parser.feed(html)
+    assert len([t for t, _ in parser.tags if t == "script"]) == 2
+    assert not any(t == "img" for t, _ in parser.tags)
+    assert json.loads(parser.payload)["dag"]["func_name"] == hostile
+    assert "\\u003c/script\\u003e" in parser.payload
+
+
+def test_render_html_empty_session():
+    from recfold.renderer import render_html
+
+    html = render_html(TraceSession("empty"))
+    assert "No calls recorded" in html
+
+
+@pytest.fixture
+def browser_page():
+    """Opt in with RECFOLD_BROWSER_TESTS=1; no browser dependency for normal tests."""
+    if os.environ.get("RECFOLD_BROWSER_TESTS") != "1":
+        pytest.skip("Set RECFOLD_BROWSER_TESTS=1 to run optional Playwright checks")
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1100, "height": 700})
+        yield page
+        browser.close()
+
+
+def test_browser_graph_switch_inspect_zoom_and_pan(browser_page, fib_session):
+    from recfold.renderer import render_html
+
+    page = browser_page
+    errors = []
+    requests = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.on("request", lambda request: requests.append(request.url))
+    page.set_content(render_html(fib_session))
+    graph = page.locator('.rf-view:not([hidden]) svg')
+    assert graph.locator('[data-node-id]').count() == 5
+    graph.locator('[data-node-id="d3"]').click()
+    assert page.locator('#rf-call option').count() == 2
+    assert "Result" in page.locator('#rf-details').inner_text()
+    page.locator('#rf-call').select_option("1")
+    assert "Call #7" in page.locator('#rf-details').inner_text()
+    original = graph.get_attribute("viewBox")
+    page.get_by_role("button", name="Zoom in", exact=True).click()
+    assert graph.get_attribute("viewBox") != original
+    page.get_by_role("button", name="Fit graph", exact=True).click()
+    assert graph.get_attribute("viewBox") == original
+    box = graph.bounding_box()
+    page.mouse.move(box["x"] + 12, box["y"] + 12)
+    page.mouse.down()
+    page.mouse.move(box["x"] + 70, box["y"] + 40)
+    page.mouse.up()
+    assert graph.get_attribute("viewBox") != original
+    page.get_by_role("button", name="Call tree", exact=True).click()
+    graph = page.locator('.rf-view:not([hidden]) svg')
+    assert graph.locator('[data-node-id]').count() == 9
+    first = graph.locator('[data-node-id="1"]')
+    first.focus()
+    first.press("Enter")
+    assert first.get_attribute("aria-pressed") == "true"
+    assert "Call #1" in page.locator('#rf-details').inner_text()
+    assert not errors
+    assert not requests
+
+
+def test_browser_hostile_values_are_text_and_mobile_fits(browser_page):
+    from recfold.renderer import render_html
+
+    hostile = '</script><img src=x onerror="window.injected=true">'
+    session = TraceSession("unsafe", {"1": CallNode("1", "unsafe", args=(hostile,))}, root_id="1")
+    page = browser_page
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.set_content(render_html(session, title=hostile))
+    page.locator('.rf-view:not([hidden]) [data-node-id]').click()
+    assert hostile in page.locator('#rf-details').inner_text()
+    assert page.locator('img').count() == 0
+    assert page.evaluate('window.injected === undefined')
+    assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
