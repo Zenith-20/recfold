@@ -1,4 +1,5 @@
 from recfold.analyzer import (
+    analyze_session,
     args_signature,
     compute_max_depth,
     compute_stats,
@@ -239,3 +240,45 @@ def test_stats_matches_models_example():
     nodes = {str(i): CallNode(node_id=str(i), func_name="f") for i in range(10)}
     dag_nodes = {f"d{i}": None for i in range(4)}
     assert compute_stats(nodes, dag_nodes).redundancy_ratio == 0.6
+
+# ---------- 6. analyze_session ----------
+
+def fib(n):
+    return n if n < 2 else fib(n - 1) + fib(n - 2)
+
+
+def test_analyze_session_empty():
+    session = TraceSession(func_name="f")
+    result = analyze_session(session)
+    assert result is session
+    assert session.dag_nodes == {}
+    assert session.dag_edges == []
+    assert session.analysis == TraceAnalysis(0, 0, 0, 0.0)
+
+
+def test_analyze_session_with_real_tracer_and_layout():
+    value, session = run_traced(fib, 5)
+    assert value == 5
+
+    analyze_session(session)
+
+    # fib(5) makes 15 calls but only 6 distinct ones: fib(0) .. fib(5).
+    assert session.analysis == TraceAnalysis(
+        total_calls=15, unique_calls=6, max_depth=4, redundancy_ratio=9 / 15
+    )
+    assert sorted(d.args_sig for d in session.dag_nodes.values()) == [
+        "(0,)", "(1,)", "(2,)", "(3,)", "(4,)", "(5,)",
+    ]
+    assert session.dag_nodes["d1"].args_sig == "(5,)"
+    assert len(session.nodes) == 15  # the raw tree is kept
+
+    layout = layout_session(session)
+    assert set(layout.positions) == set(session.dag_nodes)
+
+
+def test_analyze_session_running_twice_gives_same_result():
+    _, session = run_traced(fib, 4)
+    analyze_session(session)
+    first = (dict(session.dag_nodes), list(session.dag_edges), session.analysis)
+    analyze_session(session)
+    assert (session.dag_nodes, session.dag_edges, session.analysis) == first

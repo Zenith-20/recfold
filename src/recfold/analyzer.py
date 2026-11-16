@@ -145,3 +145,16 @@ def compute_stats(nodes: Dict[str, CallNode], dag_nodes: Dict[str, Any]) -> Trac
         max_depth=compute_max_depth(nodes),
         redundancy_ratio=ratio,
     )
+
+def analyze_session(session: TraceSession, max_len: int = 80) -> TraceSession:
+    """Fold session's call tree into a DAG and compute its statistics, in place.
+
+    Fills session.dag_nodes, session.dag_edges and session.analysis (replacing
+    any earlier values) and returns the same session, ready for layout.py.
+    The raw call tree in session.nodes is left unchanged.
+    """
+    dag_nodes, dag_edges, _ = fold_tree(session.nodes, session.root_id, max_len)
+    session.dag_nodes = dag_nodes
+    session.dag_edges = dag_edges
+    session.analysis = compute_stats(session.nodes, dag_nodes)
+    return session
