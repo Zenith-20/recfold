@@ -57,3 +57,63 @@ def compute_subtree_keys(nodes: Dict[str, CallNode], root_id: Optional[str]) -> 
         )
         keys[node_id] = table.setdefault(content, len(table))
     return keys
+
+def fold_tree(
+    nodes: Dict[str, CallNode],
+    root_id: Optional[str],
+    max_len: int = 80,
+) -> Tuple[Dict[str, DagNode], List[DagEdge], Dict[str, str]]:
+    """Fold a call tree into a DAG where each distinct subtree appears once.
+
+    Returns (dag_nodes, dag_edges, node_to_dag):
+    - dag_nodes maps a dag id ("d1", "d2", ...) to its DagNode; ids follow the
+      order in which calls are first met in a top-down, left-to-right walk,
+      so the root is always "d1". call_count says how many tree calls were
+      folded into the node.
+    - dag_edges has one edge per (caller, callee) pair. If one call makes the
+      same sub-call n > 1 times, its edge gets the label "xn".
+    - node_to_dag maps every tree node id to the dag id it was folded into.
+    The result never has a cycle, because a subtree can't contain itself.
+    """
+    keys = compute_subtree_keys(nodes, root_id)
+    if not keys:
+        return {}, [], {}
+
+    dag_nodes: Dict[str, DagNode] = {}
+    dag_of_key: Dict[int, str] = {}
+    node_to_dag: Dict[str, str] = {}
+    first_of_dag: List[str] = []
+    stack = [root_id]
+    while stack:
+        node_id = stack.pop()
+        node = nodes[node_id]
+        key = keys[node_id]
+        if key not in dag_of_key:
+            dag_id = f"d{len(dag_nodes) + 1}"
+            dag_of_key[key] = dag_id
+            dag_nodes[dag_id] = DagNode(
+                dag_id=dag_id,
+                func_name=node.func_name,
+                args_sig=args_signature(node.args, node.kwargs, max_len),
+                call_count=0,
+            )
+            first_of_dag.append(node_id)
+        dag_id = dag_of_key[key]
+        dag_nodes[dag_id].call_count += 1
+        node_to_dag[node_id] = dag_id
+        stack.extend(c for c in reversed(node.children_ids) if c in keys)
+
+    dag_edges: List[DagEdge] = []
+    for node_id in first_of_dag:
+        source = node_to_dag[node_id]
+        counts: Dict[str, int] = {}
+        for child_id in nodes[node_id].children_ids:
+            if child_id in keys:
+                target = dag_of_key[keys[child_id]]
+                counts[target] = counts.get(target, 0) + 1
+        for target, count in counts.items():
+            edge = DagEdge(source, target, f"x{count}" if count > 1 else None)
+            dag_edges.append(edge)
+            dag_nodes[source].outgoing_edges.append(edge)
+            dag_nodes[target].incoming_edges.append(edge)
+    return dag_nodes, dag_edges, node_to_dag
