@@ -1,6 +1,7 @@
 from recfold.analyzer import (
     args_signature,
     compute_max_depth,
+    compute_stats,
     compute_subtree_keys,
     fold_tree,
 )
@@ -210,3 +211,31 @@ def test_max_depth_is_relative_to_shallowest_call():
     for node in nodes.values():
         node.depth += 5
     assert compute_max_depth(nodes) == 2
+
+# ---------- 5. compute_stats ----------
+
+def test_stats_empty():
+    assert compute_stats({}, {}) == TraceAnalysis(0, 0, 0, 0.0)
+
+
+def test_stats_fib4():
+    nodes, root = build_tree(fib_spec(4))
+    dag_nodes, _, _ = fold_tree(nodes, root)
+    stats = compute_stats(nodes, dag_nodes)
+    assert stats.total_calls == 9
+    assert stats.unique_calls == 5
+    assert stats.max_depth == 3
+    assert abs(stats.redundancy_ratio - 4 / 9) < 1e-9
+
+
+def test_stats_no_repeats_means_zero_redundancy():
+    nodes, root = build_tree(("f", (2,), 0, [("f", (1,), 0, [("f", (0,), 0, [])])]))
+    dag_nodes, _, _ = fold_tree(nodes, root)
+    assert compute_stats(nodes, dag_nodes).redundancy_ratio == 0.0
+
+
+def test_stats_matches_models_example():
+    # 10 calls folded into 4 unique ones -> 60% of the calls were repeats.
+    nodes = {str(i): CallNode(node_id=str(i), func_name="f") for i in range(10)}
+    dag_nodes = {f"d{i}": None for i in range(4)}
+    assert compute_stats(nodes, dag_nodes).redundancy_ratio == 0.6

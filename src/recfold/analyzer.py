@@ -128,3 +128,20 @@ def compute_max_depth(nodes: Dict[str, CallNode]) -> int:
         return 0
     depths = [node.depth for node in nodes.values()]
     return max(depths) - min(depths)
+
+def compute_stats(nodes: Dict[str, CallNode], dag_nodes: Dict[str, Any]) -> TraceAnalysis:
+    """Return call statistics for a traced tree and its folded DAG.
+
+    total_calls is the number of tree calls, unique_calls the number of DAG
+    nodes, and redundancy_ratio the share of calls that were repeats:
+    (total - unique) / total, so 0.0 means nothing was recomputed.
+    """
+    total = len(nodes)
+    unique = len(dag_nodes)
+    ratio = (total - unique) / total if total else 0.0
+    return TraceAnalysis(
+        total_calls=total,
+        unique_calls=unique,
+        max_depth=compute_max_depth(nodes),
+        redundancy_ratio=ratio,
+    )
