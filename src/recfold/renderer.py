@@ -4,7 +4,8 @@ from dataclasses import asdict, dataclass, field
 from html import escape
 import json
 import math
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, Optional, Union
 from uuid import uuid4
 
 from recfold.analyzer import args_signature, compute_stats, fold_tree
@@ -472,3 +473,15 @@ class RecursionWidget:
             'style="width:100%;border:1px solid #dbe5ec;border-radius:12px;" '
             f'srcdoc="{escape(self.html, quote=True)}"></iframe>'
         )
+
+    def save(self, path: Union[str, Path], *, overwrite: bool = False) -> Path:
+        """Save a standalone UTF-8 HTML file for offline viewing and return its path.
+
+        Existing files are preserved unless overwrite=True. The parent folder
+        must already exist. This exports the captured data, including argument
+        and result snapshots, so only share traces you intend others to see.
+        """
+        destination = Path(path)
+        with destination.open("w" if overwrite else "x", encoding="utf-8") as output:
+            output.write(self.html)
+        return destination

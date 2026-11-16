@@ -376,3 +376,26 @@ def test_browser_two_notebook_widgets_are_independent(browser_page, fib_session)
         try { return parent.document.body === null; }
         catch (error) { return error.name === 'SecurityError'; }
     }''')
+
+
+def test_widget_save_writes_standalone_utf8_html(tmp_path, fib_session):
+    from recfold.renderer import RecursionWidget, render_html
+
+    widget = RecursionWidget(render_html(fib_session, title="递归 · recursion"))
+    destination = tmp_path / "recursion.html"
+    assert widget.save(destination) == destination
+    assert destination.read_text(encoding="utf-8") == widget.html
+    assert destination.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+
+
+def test_widget_save_preserves_existing_file_unless_overwrite_requested(tmp_path):
+    from recfold.renderer import RecursionWidget
+
+    destination = tmp_path / "existing.html"
+    destination.write_text("original", encoding="utf-8")
+    widget = RecursionWidget("replacement")
+    with pytest.raises(FileExistsError):
+        widget.save(str(destination))
+    assert destination.read_text(encoding="utf-8") == "original"
+    widget.save(destination, overwrite=True)
+    assert destination.read_text(encoding="utf-8") == "replacement"
