@@ -432,3 +432,58 @@ def test_render_session_rejects_bad_height_before_rendering(fib_session):
 
     with pytest.raises(ValueError, match="height"):
         render_session(fib_session, height="500")
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), 0, -1])
+def test_build_render_data_rejects_invalid_layout_dimensions(fib_session, value):
+    from recfold.analyzer import analyze_session
+    from recfold.renderer import build_render_data
+
+    analyze_session(fib_session)
+    layout = layout_session(fib_session)
+    layout.width = value
+    with pytest.raises(ValueError, match="finite positive"):
+        build_render_data(fib_session, layout)
+
+
+def test_build_render_data_rejects_nonfinite_coordinates(fib_session):
+    from recfold.analyzer import analyze_session
+    from recfold.renderer import build_render_data
+
+    analyze_session(fib_session)
+    layout = layout_session(fib_session)
+    layout.positions["d1"] = (float("nan"), 0)
+    with pytest.raises(ValueError, match="finite"):
+        build_render_data(fib_session, layout)
+
+
+def test_browser_empty_trace_controls_do_not_error(browser_page):
+    from recfold.renderer import render_html
+
+    errors = []
+    page = browser_page
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.set_content(render_html(TraceSession("empty")))
+    for label in ["Call tree", "Zoom in", "Zoom out", "Fit graph", "Folded DAG"]:
+        page.get_by_role("button", name=label, exact=True).click()
+    assert "No calls recorded" in page.locator('.rf-view:not([hidden])').inner_text()
+    assert not errors
+
+
+def test_browser_error_details_and_snapshot_disclosures(browser_page):
+    from recfold.renderer import render_html
+
+    @trace
+    def fail():
+        raise ValueError("bad <input>")
+
+    with pytest.raises(ValueError):
+        fail()
+    page = browser_page
+    page.set_content(render_html(fail.last_session))
+    node = page.locator('.rf-view:not([hidden]) .rf-error')
+    node.focus()
+    node.press("Space")
+    assert page.locator('.rf-error-text').inner_text() == "ValueError: bad <input>"
+    page.get_by_text("Exit snapshot", exact=True).click()
+    assert page.locator('#rf-details details[open] pre').is_visible()
