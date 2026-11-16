@@ -1,5 +1,6 @@
 from recfold.analyzer import (
     args_signature,
+    compute_max_depth,
     compute_subtree_keys,
     fold_tree,
 )
@@ -187,3 +188,25 @@ def test_fold_tree_output_is_acyclic_for_layout():
     levels = compute_levels(dag_nodes, dag_edges)
     assert levels["d1"] == 0
     assert max(levels.values()) == 5  # 6->5->4->3->2->1
+
+# ---------- 4. compute_max_depth ----------
+
+def test_max_depth_empty():
+    assert compute_max_depth({}) == 0
+
+
+def test_max_depth_single_call():
+    nodes, _ = build_tree(("f", (), 0, []))
+    assert compute_max_depth(nodes) == 0
+
+
+def test_max_depth_fib4():
+    nodes, _ = build_tree(fib_spec(4))
+    assert compute_max_depth(nodes) == 3
+
+
+def test_max_depth_is_relative_to_shallowest_call():
+    nodes, _ = build_tree(fib_spec(3))
+    for node in nodes.values():
+        node.depth += 5
+    assert compute_max_depth(nodes) == 2

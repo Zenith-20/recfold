@@ -117,3 +117,14 @@ def fold_tree(
             dag_nodes[source].outgoing_edges.append(edge)
             dag_nodes[target].incoming_edges.append(edge)
     return dag_nodes, dag_edges, node_to_dag
+
+def compute_max_depth(nodes: Dict[str, CallNode]) -> int:
+    """Return how many levels the deepest call sits below the top call (0 if empty).
+
+    Uses CallNode.depth, measured from the shallowest call, so a trace that
+    started at depth 5 still reports depth counted from its own root.
+    """
+    if not nodes:
+        return 0
+    depths = [node.depth for node in nodes.values()]
+    return max(depths) - min(depths)
