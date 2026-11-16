@@ -2,6 +2,7 @@
 
 import copy
 import json
+import xml.etree.ElementTree as ET
 
 import pytest
 
@@ -139,3 +140,63 @@ def test_build_render_data_preserves_repeated_edge_labels():
     data = build_render_data(parent.last_session)
     assert len(data["edges"]) == 1
     assert data["edges"][0]["label"] == "x2"
+
+
+def test_render_svg_draws_accessible_nodes_and_edges(fib_session):
+    from recfold.renderer import build_render_data, render_svg
+
+    data = build_render_data(fib_session)
+    root = ET.fromstring(render_svg(data))
+    ns = {"s": "http://www.w3.org/2000/svg"}
+    assert root.attrib["viewBox"] == "0 0 360 442"
+    nodes = root.findall(".//s:g[@data-node-id]", ns)
+    assert len(nodes) == 5
+    assert all(n.attrib["role"] == "button" and n.attrib["tabindex"] == "0" for n in nodes)
+    assert len(root.findall(".//s:line", ns)) == 6
+    assert all(n.find("s:title", ns) is not None for n in nodes)
+
+
+def test_render_svg_escapes_labels_and_node_attributes():
+    from recfold.renderer import build_render_data, render_svg
+
+    bad = '\"><script>alert("x")</script>&'
+    session = TraceSession(bad, {bad: CallNode(bad, bad, args=(bad,))}, root_id=bad)
+    svg = render_svg(build_render_data(session, folded=False))
+    root = ET.fromstring(svg)
+    ns = {"s": "http://www.w3.org/2000/svg"}
+    assert root.findall(".//s:script", ns) == []
+    assert root.find(".//s:g[@data-node-id]", ns).attrib["data-node-id"] == bad
+    assert "&lt;script&gt;" in svg
+
+
+def test_render_svg_empty_state_and_independent_ids(fib_session):
+    from recfold.renderer import build_render_data, render_svg
+
+    empty = render_svg(build_render_data(TraceSession("empty")))
+    assert "No calls recorded" in empty
+    first = ET.fromstring(render_svg(build_render_data(fib_session)))
+    second = ET.fromstring(render_svg(build_render_data(fib_session)))
+    ids1 = {e.attrib["id"] for e in first.iter() if "id" in e.attrib}
+    ids2 = {e.attrib["id"] for e in second.iter() if "id" in e.attrib}
+    assert ids1 and ids1.isdisjoint(ids2)
+
+
+def test_render_svg_shows_edge_multiplicity_and_error_style():
+    from recfold.renderer import build_render_data, render_svg
+
+    @trace
+    def leaf():
+        raise ValueError("oops")
+
+    @trace
+    def parent():
+        for _ in range(2):
+            try:
+                leaf()
+            except ValueError:
+                pass
+
+    parent()
+    svg = render_svg(build_render_data(parent.last_session))
+    assert ">x2<" in svg
+    assert 'class="rf-node rf-error"' in svg

@@ -1,8 +1,10 @@
 """Dependency-free HTML/SVG rendering of recorded recursion sessions."""
 
 from dataclasses import asdict
+from html import escape
 import math
 from typing import Any, Dict, Optional
+from uuid import uuid4
 
 from recfold.analyzer import args_signature, compute_stats, fold_tree
 from recfold.layout import LayoutResult, layout_dag
@@ -107,3 +109,68 @@ def build_render_data(
         ],
         "edges": edges,
     }
+
+
+def render_svg(data: Dict[str, Any]) -> str:
+    """Draw data from build_render_data as escaped, keyboard-focusable SVG.
+
+    IDs are unique per drawing. Long labels are shortened in the boxes, with
+    full labels in native SVG tooltips. Event handling is added by render_html.
+    """
+    marker_id = "rf-arrow-" + uuid4().hex
+    width, height = max(data["width"], 280), max(data["height"], 120)
+    nw, nh = data["node_width"], data["node_height"]
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" class="rf-svg" '
+        f'viewBox="0 0 {width:g} {height:g}" role="group" '
+        f'aria-label="{escape(data["func_name"], quote=True)} recursion graph">',
+        '<style>.rf-node rect{fill:#fff;stroke:#94a3b8;stroke-width:1.5}'
+        '.rf-node{cursor:pointer;outline:none}'
+        '.rf-node:hover rect,.rf-node:focus rect{stroke:#0f766e;stroke-width:3}'
+        '.rf-node[aria-pressed="true"] rect{fill:#ccfbf1;stroke:#0f766e;stroke-width:3}'
+        '.rf-error rect{fill:#fff1f2;stroke:#be123c}'
+        '.rf-node text{fill:#172b3a;font-family:ui-monospace,monospace}'
+        '.rf-edge line{stroke:#94a3b8;stroke-width:1.5}'
+        '.rf-edge text{font:11px system-ui;fill:#475569;paint-order:stroke;stroke:#f8fafc;stroke-width:4px}'
+        '.rf-edge.rf-connected line{stroke:#0f766e;stroke-width:2.5}'
+        '</style>',
+        f'<defs><marker id="{marker_id}" markerWidth="8" markerHeight="8" '
+        'refX="8" refY="4" orient="auto" markerUnits="userSpaceOnUse">'
+        '<path d="M0,0 L8,4 L0,8 Z" fill="#64748b"/></marker></defs>',
+    ]
+    for edge in data["edges"]:
+        parts.append(
+            f'<g class="rf-edge" data-source="{escape(edge["source"], quote=True)}" '
+            f'data-target="{escape(edge["target"], quote=True)}">'
+            f'<line x1="{edge["x1"]:g}" y1="{edge["y1"]:g}" '
+            f'x2="{edge["x2"]:g}" y2="{edge["y2"]:g}" marker-end="url(#{marker_id})"/>'
+        )
+        if edge["label"]:
+            parts.append(
+                f'<text x="{(edge["x1"] + edge["x2"]) / 2 + 7:g}" '
+                f'y="{(edge["y1"] + edge["y2"]) / 2:g}">{escape(edge["label"])}</text>'
+            )
+        parts.append('</g>')
+    for node in data["nodes"]:
+        label = f'{node["name"]}{node["args"]} — {node["count"]} call(s)'
+        name = node["name"]
+        suffix = f' ×{node["count"]}' if node["count"] > 1 else ""
+        limit = max(4, int((nw - 20) / 7))
+        name_limit = max(4, limit - len(suffix))
+        name = name if len(name) <= name_limit else name[:name_limit - 1] + "…"
+        args = node["args"]
+        args = args if len(args) <= limit else args[:limit - 1] + "…"
+        error_class = " rf-error" if any(c["error"] for c in node["calls"]) else ""
+        parts.append(
+            f'<g class="rf-node{error_class}" data-node-id="{escape(node["id"], quote=True)}" '
+            f'transform="translate({node["x"]:g} {node["y"]:g})" '
+            f'role="button" tabindex="0" aria-pressed="false" aria-label="{escape(label, quote=True)}">'
+            f'<title>{escape(label)}</title>'
+            f'<rect x="{-nw / 2:g}" y="{-nh / 2:g}" width="{nw:g}" height="{nh:g}" rx="8"/>'
+            f'<text text-anchor="middle" y="-4" font-size="12" font-weight="600">{escape(name + suffix)}</text>'
+            f'<text text-anchor="middle" y="13" font-size="11">{escape(args)}</text></g>'
+        )
+    if not data["nodes"]:
+        parts.append('<text x="24" y="64" fill="#475569" font-family="system-ui" font-size="14">No calls recorded</text>')
+    parts.append('</svg>')
+    return "".join(parts)
