@@ -116,6 +116,9 @@ layout.py    Pure-Python 2D node positioning and straight edge geometry
 renderer.py  Self-contained HTML/SVG generator and Jupyter widget wrapper
 ```
 
+There is no console-script entry point or package-level re-export; import
+functions from their modules as shown above.
+
 ## Development and testing
 
 To run the unit test suite:
