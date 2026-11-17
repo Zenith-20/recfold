@@ -153,9 +153,9 @@ Without this flag, browser tests are skipped automatically.
 
 ## Further documentation
 
-* [Renderer API, integration, and troubleshooting](docs/renderer.md)
-* [Demo notebook: Fibonacci, backtracking, and error guards](docs/recfold_demo.ipynb)
+* [Renderer API, integration, and troubleshooting](https://github.com/Zenith-20/recfold/blob/main/docs/renderer.md)
+* [Demo notebook: Fibonacci, backtracking, and error guards](https://github.com/Zenith-20/recfold/blob/main/docs/recfold_demo.ipynb)
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/Zenith-20/recfold/blob/main/LICENSE)

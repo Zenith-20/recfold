@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "recfold"
-version = "1.0.0"
+version = "1.0.1"
 description = "Zero-runtime-dependency recursion call-tree analyzer and state inspector for Python."
 readme = "README.md"
 requires-python = ">=3.9"
