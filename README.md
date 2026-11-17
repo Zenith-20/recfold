@@ -1,48 +1,54 @@
 # recfold
 
-Explore recursive Python calls as an interactive call tree or folded directed
-acyclic graph (DAG), directly in a Jupyter notebook. Click a node to inspect its
-recorded inputs, result, errors, and repeated occurrences.
+`recfold` is a Python package for inspecting recursive function calls in Jupyter notebooks or standalone HTML files. It records traced calls in a call tree, folds structurally matching subtrees into a directed acyclic graph (DAG), and lets you inspect arguments, return values, errors, and boundary snapshots for individual calls.
 
-The package uses only the Python standard library at runtime. Its renderer
-embeds its own HTML, SVG, CSS, and JavaScript: no Graphviz, CDN, browser extension,
-ipywidgets, or extra visualization software is required.
+## Scope and design choices
 
-## Install from this repository
+### No third-party runtime dependencies
 
-Python 3.9 or newer is required. Until a PyPI release is published, install the
-source checkout:
+`recfold` uses only the Python standard library at runtime. Its visualization is generated as self-contained HTML, SVG, CSS, and JavaScript. Runtime use does not require Graphviz, native C binaries, external CDNs, browser extensions, or `ipywidgets`. Notebook display still depends on the frontend permitting sandboxed `srcdoc` iframes and inline scripts.
+
+### Tree-to-DAG folding and redundancy metrics
+
+Tracing records calls that pass the configured depth and repeated-active-call guards. `recfold` then folds subtrees with matching structural keys into shared DAG nodes and calculates a structural redundancy ratio:
+
+```text
+redundancy ratio = (recorded calls - unique folded subtrees) / recorded calls
+```
+
+For `fib(5)`, `recfold` records 15 calls and folds them into 6 unique subtrees. The ratio is `(15 - 6) / 15 = 0.6`, or 60%.
+
+This is a post-hoc structural summary of the recorded trace, not an optimization. Folding does not memoize the traced function, speed up execution, or skip function calls. Recursive calls still execute, and the raw call tree remains in memory.
+
+### Entry and exit snapshots
+
+At call entry, `recfold` deep-copies positional and keyword arguments; at normal return, it deep-copies the result. If the function raises, the exit snapshot records the exception text. This can preserve a mutable argument, such as a backtracking path, as it appeared at each call boundary rather than exposing later mutations in earlier snapshots.
+
+These are boundary snapshots, not a step-by-step debugger. The tracer does not automatically capture local variables or intermediate mutations. Each argument and result is copied separately; references shared across separately copied values are not preserved. Values that cannot be deep-copied are replaced with placeholder text.
+
+### Structural views with occurrence records
+
+The renderer provides interactive **Call tree** and **Folded DAG** views. Select a node and use the **Recorded occurrence** dropdown to inspect the corresponding call ID, depth, parent ID, arguments, result or error, and entry/exit snapshots. The occurrences retain the original call records; call IDs are assigned in call-entry order.
+
+## Installation
+
+Python 3.9 or newer is required. Install from a local clone:
 
 ```sh
 git clone https://github.com/Zenith-20/recfold.git
 cd recfold
-python -m venv venv
-```
-
-Activate the environment using the command for your terminal:
-
-| Terminal | Command |
-| --- | --- |
-| Windows PowerShell | `.\venv\Scripts\Activate.ps1` |
-| Windows Command Prompt | `venv\Scripts\activate.bat` |
-| macOS / Linux | `source venv/bin/activate` |
-
-Then install the project and its test runner:
-
-```sh
 python -m pip install -e .
-python -m pip install pytest
-python -m pytest
 ```
 
-In an existing JupyterHub notebook, install into the active kernel with
-`%pip install -e /path/to/recfold`. The checkout must be on the JupyterHub server;
-a path on your laptop is not a path on that server. Restart the kernel if needed.
-Use the branch containing the renderer until that work is merged into `main`.
+If you are using JupyterHub, ensure the repository is on the server's filesystem and install it into your active kernel:
 
-## First visualization
+```python
+%pip install -e /path/on/server/to/recfold
+```
 
-Run this in a notebook cell:
+## Quick start
+
+Run this in a Jupyter notebook cell:
 
 ```python
 from recfold.tracer import trace
@@ -58,114 +64,95 @@ answer = fib(5)
 print(answer)  # 5
 
 widget = render_session(fib.last_session, title="Fibonacci: repeated work")
-widget  # Keep this as the last expression so Jupyter displays it.
+widget  # Keep as the last expression so Jupyter displays the widget
 ```
 
-This example records **15 calls**, folds them into **6 unique subtrees**, and
-reports maximum depth **4** and **60% repeated calls**. The root is at depth 0.
-
-- **Folded DAG / Call tree:** switch between shared subtrees and individual calls.
-- **Select a node:** see its recorded arguments, result, parent, and snapshots.
-- **Recorded occurrence:** inspect individual calls represented by a folded node.
-- **Zoom and pan:** use the buttons, drag the background, or use the keyboard.
-- **Keyboard:** Tab to a node and press Enter/Space; use +/− to zoom, 0 to fit,
-  and arrow keys to pan. Ctrl/⌘ + scroll also zooms.
-- **Errors:** calls with recorded errors have red outlines and error details.
-
-Folding summarizes work **after it has happened**. It does not memoize your
-function, skip recursive calls, or accelerate its execution.
-
-## Export without a notebook
-
-```python
-widget.save("fib.html")
-```
-
-Open the file in a browser. It remains interactive offline. Existing files are
-preserved; use `widget.save("fib.html", overwrite=True)` to replace one.
-Exports include the recorded values, so inspect them before sharing.
-
-You can also trace a plain recursive function:
+For a plain recursive function, `run_traced` returns the result and trace
+session:
 
 ```python
 from recfold.tracer import run_traced
+from recfold.renderer import render_session
 
 def factorial(n):
-    return 1 if n <= 1 else n * factorial(n - 1)
+    if n < 2:
+        return 1
+    return n * factorial(n - 1)
 
 answer, session = run_traced(factorial, 5)
-render_session(session)
+widget = render_session(session)
+widget
 ```
 
-## Documentation and examples
+## Offline HTML export
 
-- [Renderer API, integration, and troubleshooting](docs/renderer.md)
-- [Runnable notebook: Fibonacci, backtracking inputs, and errors](docs/recfold_demo.ipynb)
-- [Member 6 implementation and validation](docs/member6.md)
+To save the visualization as a standalone HTML document:
 
-Import functions from their modules, as above; `recfold.__init__` currently has
-no package-level re-exports.
+```python
+widget.save("fib.html")
 
-## How it fits together
+# Use overwrite=True to replace an existing file
+widget.save("fib.html", overwrite=True)
+```
+
+The exported document contains the graph views, styles, scripts, and rendered trace data. It makes no network requests and can be opened offline in a JavaScript-enabled browser. Review the included trace data before sharing.
+
+## Current limitations
+
+* **Synchronous execution only:** The decorator does not trace the execution of async function bodies or generator bodies. They return coroutine or generator objects when called; tracing does not await or iterate them.
+* **Representation-based cycle guard:** The active-call guard compares function names and argument `repr()` strings, using the default 80-character limit. Distinct values with the same representation can be mistaken for a repeated active call. For terminating recursion where this is a concern, `@trace(detect_cycles=False, max_depth=...)` disables that guard while retaining a depth bound.
+* **No automatic local-variable capture:** The tracer snapshots arguments at entry and return values or exceptions at exit. `snapshot_locals()` is available in `recfold.snapshot`, but the tracer does not call it.
+* **Structural matching is not semantic proof:** Folding keys use function names, argument and result representations, exception text, and ordered child subtree keys. Matching keys do not establish mathematical equivalence or purity.
+* **No virtualization:** Both graph views are rendered with all included nodes and edges. Large traces can require substantial memory and browser rendering work.
+
+## Project structure
 
 ```text
-models.py    Shared CallNode, DagNode, DagEdge, TraceSession, and statistics
-snapshot.py  Safe argument/result copies and readable representations
-tracer.py    Decorator, call tree, depth guard, and repeated-active-call guard
-analyzer.py  Equivalent-subtree folding and summary statistics
-layout.py    Pure-Python node coordinates and edge geometry
-renderer.py Interactive HTML/SVG output and notebook display
+models.py    Dataclasses for calls, DAG nodes/edges, sessions, and statistics
+snapshot.py  Deep-copying and string truncation utilities
+tracer.py    @trace decorator, call stack tracking, and depth/cycle guards
+analyzer.py  Subtree folding logic and redundancy statistics
+layout.py    Pure-Python 2D node positioning and straight edge geometry
+renderer.py  Self-contained HTML/SVG generator and Jupyter widget wrapper
 ```
 
-Rendering accepts an existing `TraceSession`. It does not execute the function
-again or change the session. Advanced users can pass an existing DAG layout;
-see the API guide.
+## Development and testing
 
-## Current limits
+To run the unit test suite:
 
-- Tracing supports ordinary synchronous functions. Async and generator bodies
-  are not traced through execution; prefer `@trace` for recursive methods.
-- Cycle detection uses shortened argument representations and can reject
-  distinct long inputs. For a known terminating function, consider
-  `@trace(detect_cycles=False, max_depth=...)` with a suitable depth bound.
-- Input snapshots and results are recorded, but arbitrary local variables and
-  every intermediate backtracking mutation are not captured automatically.
-- Folding compares function names, representations, errors, and ordered child
-  subtrees. It is not a proof that calls are mathematically equivalent or pure.
-- Large recursion trees still execute and are retained in memory. Start with
-  small teaching examples; layout and browser rendering are not virtualized.
-- Notebook output must be trusted and its frontend must permit sandboxed
-  `srcdoc` iframes and inline scripts. Administrator restrictions on JupyterHub
-  may require opening the exported HTML instead.
+```sh
+python -m pip install pytest
+python -m pytest
+```
 
-## Development
+### Optional browser tests
 
-Follow the team's one-function loop: add a failing test, implement one function,
-run `python -m pytest`, then commit and push that function with its tests.
-Keep changes within your assigned module and its tests/documentation.
-
-Optional renderer browser checks are development-only:
+End-to-end UI tests (verifying click selection, panning, zooming, and keyboard navigation in Chromium) require Playwright:
 
 ```sh
 python -m pip install playwright
 python -m playwright install chromium
 ```
 
-On macOS/Linux:
+Run them by setting the opt-in environment variable:
 
-```sh
-RECFOLD_BROWSER_TESTS=1 python -m pytest tests/test_renderer.py
-```
+* **macOS / Linux:**
+  ```sh
+  RECFOLD_BROWSER_TESTS=1 python -m pytest tests/test_renderer.py
+  ```
+* **Windows PowerShell:**
+  ```powershell
+  $env:RECFOLD_BROWSER_TESTS = "1"
+  python -m pytest tests/test_renderer.py
+  ```
 
-On PowerShell:
+Without this flag, browser tests are skipped automatically.
 
-```powershell
-$env:RECFOLD_BROWSER_TESTS = "1"
-python -m pytest tests/test_renderer.py
-```
+## Further documentation
 
-Without that opt-in flag, browser tests are skipped and only pytest is needed.
+* [Renderer API, integration, and troubleshooting](docs/renderer.md)
+* [Demo notebook: Fibonacci, backtracking, and error guards](docs/recfold_demo.ipynb)
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE)
