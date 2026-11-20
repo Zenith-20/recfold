@@ -85,7 +85,21 @@ def trace(
     detect_cycles: bool = True,
     max_repr_len: int = 80,
 ) -> Any:
-    """Decorator that records a recursive function's call tree into a TraceSession."""
+    """Decorate a synchronous function to record a call tree.
+
+    Plain-language meaning: the wrapper keeps a list of function calls and
+    their parent-child relationships while the function runs. This is tracing,
+    not memoization: recursive calls still execute normally.
+
+    ``max_depth`` is a maximum depth relative to each new root call; ``None``
+    disables that bound. ``detect_cycles`` checks repeated function name and
+    argument representations among active calls. ``max_repr_len`` limits text
+    representations used by snapshots and call keys.
+
+    The decorator may be used as ``@trace`` or ``@trace(max_depth=..., ...)``.
+    After a call, ``wrapper.last_session`` holds the resulting ``TraceSession``.
+    If used in another form, returns a decorator callable from ``decorator``.
+    """
 
     def decorator(target_func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(target_func)

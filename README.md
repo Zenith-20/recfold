@@ -97,6 +97,22 @@ widget.save("fib.html", overwrite=True)
 
 The exported document contains the graph views, styles, scripts, and rendered trace data. It makes no network requests and can be opened offline in a JavaScript-enabled browser. Review the included trace data before sharing.
 
+## Accessible description of the visual output
+
+The rendered page contains two alternative views. In the **Call tree**, every
+invocation is a separate labeled node; parent nodes connect to the calls they
+made. In the **Folded DAG**, structurally matching subtrees share a node, and
+the node label's `×N` suffix reports how many original occurrences it
+represents. An edge label such as `x2` means that two calls to the same
+subtree were made by the representative caller. The inspector identifies the
+selected node, lists each recorded occurrence, and exposes its arguments,
+return value or error, and entry/exit snapshots.
+
+The graph controls support keyboard focus, Enter/Space selection, arrow-key
+panning, plus/minus zoom, and Fit. For a text-only workflow, use the
+`build_render_data()` JSON-compatible dictionary or inspect `TraceSession`,
+`CallNode`, `DagNode`, and `TraceAnalysis` directly in Python.
+
 ## Current limitations
 
 * **Synchronous execution only:** The decorator does not trace the execution of async function bodies or generator bodies. They return coroutine or generator objects when called; tracing does not await or iterate them.
@@ -153,6 +169,7 @@ Without this flag, browser tests are skipped automatically.
 
 ## Further documentation
 
+* [Complete recfold API reference](https://github.com/Zenith-20/recfold/blob/main/https://github.com/Zenith-20/recfold/blob/main/docs/API.md)
 * [Renderer API, integration, and troubleshooting](https://github.com/Zenith-20/recfold/blob/main/docs/renderer.md)
 * [Demo notebook: Fibonacci, backtracking, and error guards](https://github.com/Zenith-20/recfold/blob/main/docs/recfold_demo.ipynb)
 
