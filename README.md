@@ -169,7 +169,7 @@ Without this flag, browser tests are skipped automatically.
 
 ## Further documentation
 
-* [Complete recfold API reference](https://github.com/Zenith-20/recfold/blob/main/https://github.com/Zenith-20/recfold/blob/main/docs/API.md)
+* [Complete recfold API reference](https://github.com/Zenith-20/recfold/blob/main/docs/API.md)
 * [Renderer API, integration, and troubleshooting](https://github.com/Zenith-20/recfold/blob/main/docs/renderer.md)
 * [Demo notebook: Fibonacci, backtracking, and error guards](https://github.com/Zenith-20/recfold/blob/main/docs/recfold_demo.ipynb)
 
